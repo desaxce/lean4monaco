@@ -228,6 +228,14 @@ customParameters = (
 {
 name = "Color Layers to SVG";
 value = 1;
+},
+{
+name = "Export SVG Table";
+value = 1;
+},
+{
+name = "SVG Export with Color";
+value = 1;
 }
 );
 instanceInterpolations = {
