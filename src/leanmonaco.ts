@@ -1,24 +1,36 @@
-import 'vscode/localExtensionHost'
-import { RegisterExtensionResult, WebSocketConfigOptionsUrl } from 'monaco-editor-wrapper'
-import { LeanClientProvider } from './vscode-lean4/vscode-lean4/src/utils/clientProvider'
-import { Uri, workspace } from 'vscode'
-import { InfoProvider } from './vscode-lean4/vscode-lean4/src/infoview'
-import { AbbreviationFeature } from './vscode-lean4/vscode-lean4/src/abbreviation/AbbreviationFeature'
-import { LeanTaskGutter } from './vscode-lean4/vscode-lean4/src/taskgutter'
-import { IFrameInfoWebviewFactory } from './infowebview'
-import { setupMonacoClient } from './monacoleanclient'
-import { checkLean4ProjectPreconditions } from './preconditions'
-import { initialize, getService, IThemeService, IConfigurationService } from 'vscode/services'
-import getConfigurationServiceOverride from '@codingame/monaco-vscode-configuration-service-override'
-import getTextmateServiceOverride from '@codingame/monaco-vscode-textmate-service-override'
-import getThemeServiceOverride from '@codingame/monaco-vscode-theme-service-override'
-import getLanguagesServiceOverride from '@codingame/monaco-vscode-languages-service-override'
-import getModelServiceOverride from '@codingame/monaco-vscode-model-service-override'
-import { ExtensionHostKind, IExtensionManifest, registerExtension } from 'vscode/extensions'
-import { DisposableStore } from 'vscode/monaco'
-import packageJson from './vscode-lean4/vscode-lean4/package.json'
-import { IGrammar } from 'vscode/vscode/vs/platform/extensions/common/extensions'
-import { ExtensionKind } from 'vscode/vscode/vs/platform/environment/common/environment'
+import "vscode/localExtensionHost";
+import {
+  RegisterExtensionResult,
+  WebSocketConfigOptionsUrl,
+} from "monaco-editor-wrapper";
+import { LeanClientProvider } from "./vscode-lean4/vscode-lean4/src/utils/clientProvider";
+import { Uri, workspace } from "vscode";
+import { InfoProvider } from "./vscode-lean4/vscode-lean4/src/infoview";
+import { AbbreviationFeature } from "./vscode-lean4/vscode-lean4/src/abbreviation/AbbreviationFeature";
+import { LeanTaskGutter } from "./vscode-lean4/vscode-lean4/src/taskgutter";
+import { IFrameInfoWebviewFactory } from "./infowebview";
+import { setupMonacoClient } from "./monacoleanclient";
+import { checkLean4ProjectPreconditions } from "./preconditions";
+import {
+  initialize,
+  getService,
+  IThemeService,
+  IConfigurationService,
+} from "vscode/services";
+import getConfigurationServiceOverride from "@codingame/monaco-vscode-configuration-service-override";
+import getTextmateServiceOverride from "@codingame/monaco-vscode-textmate-service-override";
+import getThemeServiceOverride from "@codingame/monaco-vscode-theme-service-override";
+import getLanguagesServiceOverride from "@codingame/monaco-vscode-languages-service-override";
+import getModelServiceOverride from "@codingame/monaco-vscode-model-service-override";
+import {
+  ExtensionHostKind,
+  IExtensionManifest,
+  registerExtension,
+} from "vscode/extensions";
+import { DisposableStore } from "vscode/monaco";
+import packageJson from "./vscode-lean4/vscode-lean4/package.json";
+import { IGrammar } from "vscode/vscode/vs/platform/extensions/common/extensions";
+import { ExtensionKind } from "vscode/vscode/vs/platform/environment/common/environment";
 
 /** Options for LeanMonaco.
  *
@@ -31,68 +43,79 @@ import { ExtensionKind } from 'vscode/vscode/vs/platform/environment/common/envi
  */
 export type LeanMonacoOptions = {
   websocket: {
-    url: string
-  }
-  htmlElement?: HTMLElement
+    url: string;
+  };
+  htmlElement?: HTMLElement;
   vscode?: {
-    [id: string]: any
-  }
-}
+    [id: string]: any;
+  };
+};
 
-
- export class LeanMonaco {
-  private ready: (value: void | PromiseLike<void>) => void
+export class LeanMonaco {
+  private ready: (value: void | PromiseLike<void>) => void;
   whenReady = new Promise<void>((resolve) => {
-    this.ready = resolve
-  })
+    this.ready = resolve;
+  });
 
-  static activeInstance: LeanMonaco | null = null
+  static activeInstance: LeanMonaco | null = null;
 
-  registerFileUrlResults = new DisposableStore()
-  extensionRegisterResult: RegisterExtensionResult | undefined
-  clientProvider: LeanClientProvider | undefined
-  infoProvider: InfoProvider | undefined
-  iframeWebviewFactory : IFrameInfoWebviewFactory | undefined
-  abbreviationFeature: AbbreviationFeature | undefined
-  taskGutter: LeanTaskGutter | undefined
-  infoviewEl: HTMLElement | undefined
-  disposed = false
+  registerFileUrlResults = new DisposableStore();
+  extensionRegisterResult: RegisterExtensionResult | undefined;
+  clientProvider: LeanClientProvider | undefined;
+  infoProvider: InfoProvider | undefined;
+  iframeWebviewFactory: IFrameInfoWebviewFactory | undefined;
+  abbreviationFeature: AbbreviationFeature | undefined;
+  taskGutter: LeanTaskGutter | undefined;
+  infoviewEl: HTMLElement | undefined;
+  disposed = false;
 
   async start(options: LeanMonacoOptions) {
-    console.debug('[LeanMonaco]: starting')
+    console.debug("[LeanMonaco]: starting");
 
     if (LeanMonaco.activeInstance == this) {
-      console.warn('[LeanMonaco]: A LeanMonaco instance cannot be started twice.')
-      return
+      console.warn(
+        "[LeanMonaco]: A LeanMonaco instance cannot be started twice."
+      );
+      return;
     }
     if (LeanMonaco.activeInstance) {
-      console.warn('[LeanMonaco]: There can only be one active LeanMonaco instance at a time. Disposing previous instance.')
-      LeanMonaco.activeInstance?.dispose()
+      console.warn(
+        "[LeanMonaco]: There can only be one active LeanMonaco instance at a time. Disposing previous instance."
+      );
+      LeanMonaco.activeInstance?.dispose();
     }
-    LeanMonaco.activeInstance = this
+    LeanMonaco.activeInstance = this;
 
-    if (! window.MonacoEnvironment) {
-      console.debug('[LeanMonaco]: setting monaco environment')
-      type WorkerLoader = () => Worker
+    if (!window.MonacoEnvironment) {
+      console.debug("[LeanMonaco]: setting monaco environment");
+      type WorkerLoader = () => Worker;
       const workerLoaders: Partial<Record<string, WorkerLoader>> = {
-        editorWorkerService: () => new Worker(
-          new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
-          { type: 'module' }
-        ),
-        textMateWorker: () => new Worker(
-          new URL('@codingame/monaco-vscode-textmate-service-override/worker', import.meta.url),
-          { type: 'module' }
-        ),
-      }
+        editorWorkerService: () =>
+          new Worker(
+            new URL(
+              "monaco-editor/esm/vs/editor/editor.worker.js",
+              import.meta.url
+            ),
+            { type: "module" }
+          ),
+        textMateWorker: () =>
+          new Worker(
+            new URL(
+              "@codingame/monaco-vscode-textmate-service-override/worker",
+              import.meta.url
+            ),
+            { type: "module" }
+          ),
+      };
       window.MonacoEnvironment = {
         getWorker: function (moduleId, label) {
-          const workerFactory = workerLoaders[label]
+          const workerFactory = workerLoaders[label];
           if (workerFactory != null) {
-            return workerFactory()
+            return workerFactory();
           }
-          throw new Error(`Unimplemented worker ${label} (${moduleId})`)
-        }
-      }
+          throw new Error(`Unimplemented worker ${label} (${moduleId})`);
+        },
+      };
 
       await initialize(
         {
@@ -100,7 +123,7 @@ export type LeanMonacoOptions = {
           ...getThemeServiceOverride(),
           ...getConfigurationServiceOverride(),
           ...getLanguagesServiceOverride(),
-          ...getModelServiceOverride()
+          ...getModelServiceOverride(),
         },
         // The wrapper HTML element determines the extend of certain monaco features
         // such as the right-click context menu.
@@ -109,98 +132,145 @@ export type LeanMonacoOptions = {
           workspaceProvider: {
             trusted: true,
             workspace: {
-              workspaceUri: Uri.file('/workspace.code-workspace')
+              workspaceUri: Uri.file("/workspace.code-workspace"),
             },
             async open() {
-              return false
-            }
-          }
+              return false;
+            },
+          },
         }
-      )
-      console.debug('[LeanMonaco]: done initializing')
+      );
+      console.debug("[LeanMonaco]: done initializing");
     }
-    await (await import('@codingame/monaco-vscode-theme-defaults-default-extension')).whenReady
+    await (
+      await import("@codingame/monaco-vscode-theme-defaults-default-extension")
+    ).whenReady;
 
     if (this.disposed) {
-      console.debug('[LeanMonaco]: is disposed (A)')
-      return
+      console.debug("[LeanMonaco]: is disposed (A)");
+      return;
     }
 
-    this.extensionRegisterResult = registerExtension(this.getExtensionManifest(), ExtensionHostKind.LocalProcess)
+    this.extensionRegisterResult = registerExtension(
+      this.getExtensionManifest(),
+      ExtensionHostKind.LocalProcess
+    );
 
     for (const entry of this.getExtensionFiles()) {
-      const registerFileUrlResult = (this.extensionRegisterResult as any).registerFileUrl(entry[0], entry[1].href)
-      this.registerFileUrlResults.add(registerFileUrlResult)
+      const registerFileUrlResult = (
+        this.extensionRegisterResult as any
+      ).registerFileUrl(entry[0], entry[1].href);
+      this.registerFileUrlResults.add(registerFileUrlResult);
     }
 
-    await this.extensionRegisterResult.whenReady()
+    await this.extensionRegisterResult.whenReady();
 
     if (this.disposed) {
-      console.debug('[LeanMonaco]: is disposed (B)')
-      return
+      console.debug("[LeanMonaco]: is disposed (B)");
+      return;
     }
 
-    const themeService = await getService(IThemeService)
-    const configurationService = await getService(IConfigurationService)
+    const themeService = await getService(IThemeService);
+    const configurationService = await getService(IConfigurationService);
 
     if (this.disposed) {
-      console.debug('[LeanMonaco]: is disposed (C)')
-      return
+      console.debug("[LeanMonaco]: is disposed (C)");
+      return;
     }
 
-    this.updateVSCodeOptions(options.vscode ?? {})
+    this.updateVSCodeOptions(options.vscode ?? {});
 
-    this.abbreviationFeature = new AbbreviationFeature({} as any, { kind: 'MoveAllSelections' })
+    this.abbreviationFeature = new AbbreviationFeature({} as any, {
+      kind: "MoveAllSelections",
+    });
 
     this.clientProvider = new LeanClientProvider(
       {
-        installChanged: () => {return {dispose: ()  => {}}},
-        testLeanVersion: () => {return "lean4/stable"},
-        getElanDefaultToolchain: () => {return "lean4/stable"}} as any,
-        {appendLine: () => {}
+        installChanged: () => {
+          return { dispose: () => {} };
+        },
+        testLeanVersion: () => {
+          return "lean4/stable";
+        },
+        getElanDefaultToolchain: () => {
+          return "lean4/stable";
+        },
       } as any,
+      { appendLine: () => {} } as any,
       checkLean4ProjectPreconditions,
       setupMonacoClient(this.getWebSocketOptions(options))
-    )
+    );
 
     const asAbsolutePath = (path: string) => {
       switch (path) {
         // url.pathToFileURL
-        case "media/progress-light.svg":       return Uri.parse(`${new URL('./vscode-lean4/vscode-lean4/media/progress-light.svg', import.meta.url)}`)
-        case "media/progress-dark.svg":        return Uri.parse(`${new URL('./vscode-lean4/vscode-lean4/media/progress-dark.svg', import.meta.url)}`)
-        case "media/progress-error-light.svg": return Uri.parse(`${new URL('./vscode-lean4/vscode-lean4/media/progress-error-light.svg', import.meta.url)}`)
-        case "media/progress-error-dark.svg":  return Uri.parse(`${new URL('./vscode-lean4/vscode-lean4/media/progress-error-dark.svg', import.meta.url)}`)
+        case "media/progress-light.svg":
+          return Uri.parse(
+            `${new URL(
+              "./vscode-lean4/vscode-lean4/media/progress-light.svg",
+              import.meta.url
+            )}`
+          );
+        case "media/progress-dark.svg":
+          return Uri.parse(
+            `${new URL(
+              "./vscode-lean4/vscode-lean4/media/progress-dark.svg",
+              import.meta.url
+            )}`
+          );
+        case "media/progress-error-light.svg":
+          return Uri.parse(
+            `${new URL(
+              "./vscode-lean4/vscode-lean4/media/progress-error-light.svg",
+              import.meta.url
+            )}`
+          );
+        case "media/progress-error-dark.svg":
+          return Uri.parse(
+            `${new URL(
+              "./vscode-lean4/vscode-lean4/media/progress-error-dark.svg",
+              import.meta.url
+            )}`
+          );
       }
-    }
+    };
 
-    this.taskGutter = new LeanTaskGutter(this.clientProvider, {asAbsolutePath: asAbsolutePath} as any)
+    this.taskGutter = new LeanTaskGutter(this.clientProvider, {
+      asAbsolutePath: asAbsolutePath,
+    } as any);
 
     // Load fonts
     const fontFiles = [
       new FontFace(
-      "JuliaMono",
-      `url(${new URL("./fonts/JuliaMono-Regular.ttf", import.meta.url)})`,
-      ),
-      new FontFace(
-        "Noto Color Emoji",
-        `url(${new URL("./fonts/NotoColorEmoji-Regular.ttf", import.meta.url)})`,
+        "JuliaMono",
+        `url(${new URL("./fonts/JuliaMono-Regular.ttf", import.meta.url)})`
       ),
       // new FontFace(
       //   "LeanWeb",
       //   `url(${new URL("./fonts/LeanWeb-Regular.otf", import.meta.url)})`,
       // )
-    ]
-    fontFiles.map(font => {
-      document.fonts.add(font)
-    })
+    ];
+    fontFiles.map((font) => {
+      document.fonts.add(font);
+    });
 
-    this.iframeWebviewFactory = new IFrameInfoWebviewFactory(themeService, configurationService, fontFiles)
-    if (this.infoviewEl) this.iframeWebviewFactory.setInfoviewElement(this.infoviewEl)
+    this.iframeWebviewFactory = new IFrameInfoWebviewFactory(
+      themeService,
+      configurationService,
+      fontFiles
+    );
+    if (this.infoviewEl)
+      this.iframeWebviewFactory.setInfoviewElement(this.infoviewEl);
 
-    this.infoProvider = new InfoProvider(this.clientProvider, {language: 'lean4'}, {} as any, this.iframeWebviewFactory)
+    this.infoProvider = new InfoProvider(
+      this.clientProvider,
+      { language: "lean4" },
+      {} as any,
+      this.iframeWebviewFactory
+    );
 
     // Wait for all fonts to be loaded
-    await Promise.all(fontFiles.map(font => font.load()))
+    await Promise.all(fontFiles.map((font) => font.load()));
 
     // Here we provide default options for the editor. They can be overwritten by the user.
     this.updateVSCodeOptions({
@@ -219,42 +289,70 @@ export type LeanMonacoOptions = {
 
       // other options
       "editor.renderWhitespace": "trailing",
-      "editor.fontFamily": "'JuliaMono', 'Noto Color Emoji'",
+      "editor.fontFamily": "'JuliaMono'",
       "editor.wordWrap": "on",
       "editor.wrappingStrategy": "advanced",
       "workbench.colorTheme": "Visual Studio Light",
-      ...options.vscode
-    })
+      ...options.vscode,
+    });
 
     if (this.disposed) {
-      console.debug('[LeanMonaco]: is disposed (D)')
-      return
+      console.debug("[LeanMonaco]: is disposed (D)");
+      return;
     }
 
-    console.info('[LeanMonaco]: is ready!')
-    this.ready()
+    console.info("[LeanMonaco]: is ready!");
+    this.ready();
   }
 
   /** Update options of the editor */
-  updateVSCodeOptions(vsCodeOptions: { [id: string]: any }){
+  updateVSCodeOptions(vsCodeOptions: { [id: string]: any }) {
     for (const key in vsCodeOptions) {
-      workspace.getConfiguration().update(key, vsCodeOptions[key])
+      workspace.getConfiguration().update(key, vsCodeOptions[key]);
     }
   }
 
-  setInfoviewElement(infoviewEl: HTMLElement){
-    if (this.iframeWebviewFactory) this.iframeWebviewFactory.setInfoviewElement(infoviewEl)
-    this.infoviewEl = infoviewEl
+  setInfoviewElement(infoviewEl: HTMLElement) {
+    if (this.iframeWebviewFactory)
+      this.iframeWebviewFactory.setInfoviewElement(infoviewEl);
+    this.infoviewEl = infoviewEl;
   }
 
   protected getExtensionFiles() {
-    const extensionFiles = new Map<string, URL>()
-    extensionFiles.set('/language-configuration.json', new URL('./vscode-lean4/vscode-lean4/language-configuration.json', import.meta.url))
-    extensionFiles.set('/syntaxes/lean4.json', new URL('./vscode-lean4/vscode-lean4/syntaxes/lean4.json', import.meta.url))
-    extensionFiles.set('/syntaxes/lean4-markdown.json', new URL('./vscode-lean4/vscode-lean4/syntaxes/lean4-markdown.json', import.meta.url))
-    extensionFiles.set('/syntaxes/codeblock.json', new URL('./vscode-lean4/vscode-lean4/syntaxes/codeblock.json', import.meta.url))
-    extensionFiles.set('/themes/cobalt2.json', new URL('./themes/cobalt2.json', import.meta.url))
-    return extensionFiles
+    const extensionFiles = new Map<string, URL>();
+    extensionFiles.set(
+      "/language-configuration.json",
+      new URL(
+        "./vscode-lean4/vscode-lean4/language-configuration.json",
+        import.meta.url
+      )
+    );
+    extensionFiles.set(
+      "/syntaxes/lean4.json",
+      new URL(
+        "./vscode-lean4/vscode-lean4/syntaxes/lean4.json",
+        import.meta.url
+      )
+    );
+    extensionFiles.set(
+      "/syntaxes/lean4-markdown.json",
+      new URL(
+        "./vscode-lean4/vscode-lean4/syntaxes/lean4-markdown.json",
+        import.meta.url
+      )
+    );
+    extensionFiles.set(
+      "/syntaxes/codeblock.json",
+      new URL(
+        "./vscode-lean4/vscode-lean4/syntaxes/codeblock.json",
+        import.meta.url
+      )
+    );
+    extensionFiles.set(
+      "/themes/cobalt2.json",
+      new URL("./themes/cobalt2.json", import.meta.url)
+    );
+    return extensionFiles;
   }
 
   /** This basically returns the `package.json` of `vscode-lean4` with some ts-fixes and the custom themes. */
@@ -274,34 +372,36 @@ export type LeanMonacoOptions = {
         // Add custom themes here.
         themes: [
           {
-            "id": "Cobalt",
-            "label": "Cobalt",
-            "uiTheme": "vs",
-            "path": "./themes/cobalt2.json"
-          }
+            id: "Cobalt",
+            label: "Cobalt",
+            uiTheme: "vs",
+            path: "./themes/cobalt2.json",
+          },
         ],
       },
       extensionKind: packageJson.extensionKind as ExtensionKind[],
-    }
+    };
   }
 
-  protected getWebSocketOptions(options: LeanMonacoOptions): WebSocketConfigOptionsUrl {
+  protected getWebSocketOptions(
+    options: LeanMonacoOptions
+  ): WebSocketConfigOptionsUrl {
     return {
-      $type: 'WebSocketUrl',
+      $type: "WebSocketUrl",
       startOptions: {
         onCall: () => {
-            console.log('Connected to socket.')
+          console.log("Connected to socket.");
         },
-        reportStatus: true
+        reportStatus: true,
       },
       stopOptions: {
         onCall: () => {
-            console.log('Disconnected from socket.')
+          console.log("Disconnected from socket.");
         },
-        reportStatus: true
+        reportStatus: true,
       },
-      ...options.websocket
-    }
+      ...options.websocket,
+    };
   }
 
   /** Restarting all clients.
@@ -309,25 +409,27 @@ export type LeanMonacoOptions = {
    * (is that true?), but the vscode-extension is designed for more.
    */
   restart() {
-    this.clientProvider?.getClients().map(client => {client.restart()})
+    this.clientProvider?.getClients().map((client) => {
+      client.restart();
+    });
   }
 
   dispose() {
     if (LeanMonaco.activeInstance == this) {
-      LeanMonaco.activeInstance = null
+      LeanMonaco.activeInstance = null;
     }
-    this.registerFileUrlResults?.dispose()
-    this.registerFileUrlResults = new DisposableStore()
-    this.extensionRegisterResult?.dispose()
-    this.extensionRegisterResult = undefined
-    this.disposed = true
-    this.infoProvider?.dispose()
-    this.infoProvider = undefined
-    this.taskGutter?.dispose()
-    this.taskGutter = undefined
-    this.clientProvider?.dispose()
-    this.clientProvider = undefined
-    this.abbreviationFeature?.dispose()
-    this.abbreviationFeature = undefined
+    this.registerFileUrlResults?.dispose();
+    this.registerFileUrlResults = new DisposableStore();
+    this.extensionRegisterResult?.dispose();
+    this.extensionRegisterResult = undefined;
+    this.disposed = true;
+    this.infoProvider?.dispose();
+    this.infoProvider = undefined;
+    this.taskGutter?.dispose();
+    this.taskGutter = undefined;
+    this.clientProvider?.dispose();
+    this.clientProvider = undefined;
+    this.abbreviationFeature?.dispose();
+    this.abbreviationFeature = undefined;
   }
 }
